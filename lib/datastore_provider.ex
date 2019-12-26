@@ -42,14 +42,17 @@ defmodule DatastoreProvider do
       table
       |> fetch_entities()
       |> transform()
+      |> List.flatten()
+      |> IO.inspect(label: :runtime_config)
 
-    Config.Reader.merge(config, runtime_config)
+    Enum.reduce(runtime_config, config, fn c, acc ->
+      Config.Reader.merge(acc, [c])
+    end)
+    |> IO.inspect()
   end
 
   def fetch_entities(table) do
-    Diplomat.Query.new(
-      "select * from `#{table}`"
-    ) |> Diplomat.Query.execute
+    Diplomat.Query.new("select * from `#{table}`") |> Diplomat.Query.execute()
   end
 
   def transform(items) when is_list(items) do
@@ -57,10 +60,12 @@ defmodule DatastoreProvider do
   end
 
   def transform(%{properties: properties}) do
-    [{key, %{value: value}}] = Map.to_list(properties)
-
-    String.split(key, "/")
-    |> to_config(value)
+    properties
+    |> Map.to_list()
+    |> Enum.map(fn {key, %{value: value}} ->
+      String.split(key, "/")
+      |> to_config(value)
+    end)
   end
 
   def to_config([app, key], value) do
@@ -69,9 +74,13 @@ defmodule DatastoreProvider do
 
   def to_config([app, key, v], value) do
     {
-      String.to_atom(app), [{
-        String.to_atom(key), [{String.to_atom(v), value}]
-      }]
+      String.to_atom(app),
+      [
+        {
+          String.to_atom(key),
+          [{String.to_atom(v), value}]
+        }
+      ]
     }
   end
 end
